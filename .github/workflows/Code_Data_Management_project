@@ -1,0 +1,595 @@
+ # group 2 
+
+import pandas as pd
+import numpy     as np
+import matplotlib.pyplot as plt
+
+pd.set_option('display.max_columns', 30)
+pd.options.mode.chained_assignment = None
+
+DATA                           = pd.read_csv("./projet-dm-2.csv")   
+Activity_Types_tableCLEAN      = pd.read_csv("./projet-dm-activity-desc-2.csv")  
+Students_tableCLEAN            = pd.read_csv("./projet-dm-students-2.csv")  
+Activities_tableCLEAN          = pd.read_csv("./projet-dm-typed-activities-2.csv")
+ActivitiesCLEAN                = pd.read_csv("./projet-dm-activities-2.csv")
+TravelsCLEAN                   = pd.read_csv("./projet-dm-travels-2.csv")
+
+cspCLEAN                       = pd.read_csv("./csp.csv")
+popCityCLEAN                   = pd.read_csv("./cities-population.csv")
+departmentsNameCLEAN           = pd.read_csv("./departments.csv")
+regionsCLEAN                   = pd.read_csv("./regions.csv")
+cities_gpsCLEAN                = pd.read_csv("./cities-gps.csv")
+citiesCLEAN                    = pd.read_csv("./cities.csv")
+
+# Création de bases de travail
+data                            = DATA
+Activity_Desc_table             = Activity_Types_tableCLEAN
+Students_table                  = Students_tableCLEAN
+Activities_table                = Activities_tableCLEAN
+Activities                      = ActivitiesCLEAN
+Travels                         = TravelsCLEAN
+csp                             = cspCLEAN
+popCity                         = popCityCLEAN
+departmentsName                 = departmentsNameCLEAN
+regions                         = regionsCLEAN
+cities_gps                      = cities_gpsCLEAN
+cities                          = citiesCLEAN
+
+# Création de deux variables Nbtravel et NbActivities qui permettent de compter le nombre d'activité par individu et d'activité 
+TravelsSeries= Travels["id"].value_counts()
+NbTravel = pd.DataFrame(TravelsSeries)
+NbTravel["person_id"]= TravelsSeries.index
+
+ActivitiesNBserie = Activities_table["id"].value_counts()
+NbActivities = pd.DataFrame(ActivitiesNBserie)
+NbActivities["person_id"] = ActivitiesNBserie.index
+
+departmentsName    .rename(columns={"id":"departmentNb", "name":"department"}                       ,inplace = True)
+popCity            .rename(columns={"id":"code_insee","population":"city population"}               ,inplace = True)
+csp                .rename(columns={"code":"job_id"}                                                ,inplace = True)
+regions            .rename(columns={"id":"region","name":"Region_name"}                             ,inplace = True)
+Students_table     .rename(columns={"id":"person_id","city":"school city"}                          ,inplace = True)
+Activities_table   .rename(columns={"id":"person_id","type":"activity_types"}                       ,inplace = True)
+Activity_Desc_table.rename(columns={"id":"activity_types","name":"Activity_desc"}                   ,inplace = True)
+Activities         .rename(columns={"id":"person_id"}                                               ,inplace = True)
+Travels            .rename(columns={"id":"person_id","city":"city_travels","date":"date_travels"}   ,inplace = True)
+cities_gps         .rename(columns={"id":"code_insee"}                                              ,inplace = True)
+cities             .rename(columns={"id":"code_insee","name":"city_name",
+                                   "department":"departmentNb","type":"city_type"}                  ,inplace = True)
+NbTravel           .rename(columns={"id":"trip_nb"}                                                 ,inplace = True)
+NbActivities       .rename(columns={"id":"Activities_nb"}                                           ,inplace = True)
+
+"""#Module de travail pour étudier les caractéristiques de chaque base de données  
+ml = [data, Activity_Desc_table,Students_table,Activities_table,
+      Activities,Travels,csp,popCity,departmentsName,regions,cities_gps,cities]
+for i in ml : 
+    print(i.columns,i.shape)
+"""
+
+# Module permettant la jointure des bases
+cities_gps_name                     = pd.merge(cities_gps,cities                           ,on="code_insee"   ,how = "inner")
+NbActivities_ActivitiesTable        = pd.merge(Activities_table,NbActivities               ,on = "person_id"                )
+dataPop                             = pd.merge(data,popCity                                ,on = "code_insee" ,how = "inner")
+dataPopLatlong                      = pd.merge(dataPop,cities_gps_name                     ,on = "code_insee" ,how = "inner")
+dataCsp                             = pd.merge(dataPopLatlong,csp                          ,on = "job_id"     ,how = "inner")
+dataCsp_NbTravel                    = pd.merge(dataCsp,NbTravel                            ,on = "person_id"  ,how = "outer")
+
+# Module qui permet qui permet d'associer les noms des villes + coordonnées aux villes d'études
+cities_gps_name_bis          = cities_gps_name[["code_insee","departmentNb","X","Y"]]
+cities_gps_name_bis          = cities_gps_name_bis[cities_gps_name_bis["departmentNb"]!="2A"]
+cities_gps_name_bis          = cities_gps_name_bis[cities_gps_name_bis["departmentNb"]!="2B"]
+cities_gps_name_bis["school city"] = pd.to_numeric(cities_gps_name_bis["code_insee"])
+Students_table     ["school city"] = pd.to_numeric(Students_table["school city"])
+Students_table_loc                  = pd.merge(Students_table,cities_gps_name_bis          ,on ="school city",how ="inner")
+Students_table_loc .rename(columns = {"X":"X_school","Y":"Y_school"} ,inplace = True)
+Students_table_loc=Students_table_loc.drop(columns=["code_insee","departmentNb"])
+
+datafull                            = pd.merge(dataCsp_NbTravel,Students_table_loc       ,on = "person_id"    ,how = "outer")
+datafullT                           = pd.merge(datafull,Travels                          ,on ="person_id"     ,how ="outer" )
+Activity_Date_Desc                  = pd.merge(NbActivities_ActivitiesTable,
+                                               Activity_Desc_table                       ,on = "activity_types"             )
+
+# Module qui permet de compter le nombre d'activité par ind
+rs = ["Activity 1","Activity 2","Activity 3","Activity 4"]
+for i in rs: 
+    Serietare = pd.Series(Activity_Date_Desc["Activity_desc"]==i)
+    Serietare.index = Activity_Date_Desc["person_id"]
+    Serietare=Serietare[Serietare==True]
+    Serie = pd.DataFrame(Serietare)
+    Serie["person_id"] = Serie.index
+    x = Serie["person_id"].value_counts()
+    xt = pd.DataFrame(x)
+    xt.rename(columns = {"person_id":i},inplace = True)
+    xt["person_id"] = xt.index
+    Activity_Date_Desc = pd.merge(Activity_Date_Desc,xt, on = "person_id",how = "outer")
+
+datafull_ActDesc                 = pd.merge(datafullT,Activity_Date_Desc                ,on =["person_id"]      ,how="outer")
+datafull_ActDesc                 = pd.merge(datafullT,Activity_Date_Desc                ,on = ["person_id"]     ,how="outer")
+
+datafull_ActDesc.drop_duplicates(subset=["person_id"], keep='first', inplace=True)
+
+datafull_ActDesc_Dep            = pd.merge(datafull_ActDesc,departmentsName            ,on = "departmentNb")
+datafull_ActDesc_DepReg         = pd.merge(datafull_ActDesc_Dep,regions                ,on = "region"          ,how="inner")
+
+#Add name of department and region
+datafull_ActDesc_Dep           = pd.merge(datafull_ActDesc,departmentsName             ,on ="departmentNb"      ,how="outer")
+datafull_ActDesc_DepReg        = pd.merge(datafull_ActDesc_Dep,regions                 ,on ="region"            ,how="inner")
+dataTest                       = pd.merge(Travels,data                                 ,on = "person_id"        ,how="left")
+dataTest                       = pd.merge(dataTest,cities_gps_name                     ,on ="code_insee"        ,how="left")
+
+cities_gps_nameBIS = cities_gps_name[["code_insee","X","Y"]]
+cities_gps_nameBIS.rename(columns = {"code_insee":"city_travel","X":"X_travels","Y":"Y_travels"},inplace = True)
+
+
+dataframe               =      datafull_ActDesc_DepReg
+
+#______________________________________________________________________________
+# Création des labels et des listes de couleurs 
+
+labels_City_size                     = ["Villages","Petites villes","Villes moyennes","Grandes villes","Très grandes villes"]
+labels_Age_cat                       = ["15-24 ans","25-49 ans","50 ans et plus"]
+labels_longitude_cat                 = ["Fuseau 30 - Région Ouest","Fuseau 31 - Région Centre Ouest","Fuseau 31 - Région Centre Est","Fuseau 32 - Région Est"]
+labels_latitude_cat                  = ["Lambert 4 - Corse","Lambert 3 - Sud","Lambert 2 - Centre", "Lambert 1 - Nord"]
+labels_Region_National               = ["West_North","West_Central","Central_Nord","Central","Central_Sud","East_North", "East_Central"]
+labels_cities_type                   = ["Capital d'état","Chef-lieu canton","Commune simple","Préfecture","Préfecture de région","Sous-préfecture"] 
+list_trip                            = ["ne voyage pas","voyage peu [1,3]","voyage régulièrement [4-8]","voyage très souvent (+ de 8 fois)"]
+list_Activity                        = ["Activity 1","Activity 2","Activity 3","Activity 4"]
+list_A_cat                           = ["A1_nb_cat","A2_nb_cat","A3_nb_cat","A4_nb_cat"]
+list_A_Nb                            = ["0-2","3-5","6-10","11-20","21+"]
+list_Dist_S_H_cat                    = ["[0-1] km", "]1-5]km","]5-10]km","]10-20]km","plus de 20km" ]
+
+colors_men_women                     = ["salmon", "lightskyblue"]
+colors_Fail_Success                  = ["darkorange","Seagreen"]
+colors7                              = ["RoyalBlue","lightskyblue","cyan","PaleGreen","green","OliveDrab","tan"]
+
+#_______________________________________________________________________________
+
+
+dataframe['City_size']          =   pd.cut(dataframe['city population']
+                                                                    ,[10,1500,5000,50000,250000,2500000]
+                                                                                               ,labels= labels_City_size)
+dataframe["age_cat"]            =   pd.cut(dataframe["age"]         ,[15,24,49,101]            ,labels = labels_Age_cat) 
+dataframe["age_cat_details"]    =   pd.cut(dataframe["age"]         ,[15,20,25,30,35,40,45,50])
+dataframe["longitude_cat"]      =   pd.cut(dataframe["longitude"]   ,[-6,0,3,6,12]             ,labels = labels_longitude_cat)
+dataframe["latitude_cat"]       =   pd.cut(dataframe["latitude"]    ,[40,42.76,44.45,48.15,52] ,labels = labels_latitude_cat)  
+
+dataframe["trip_nb"]            =   np.nan_to_num(dataframe["trip_nb"])
+
+dataframe["trip_nb_cat"]        =   pd.cut(dataframe["trip_nb"]     ,[-0.1,0.99,3,8,100]       ,labels = list_trip) 
+
+dataframe["Activity 1"]         =   np.nan_to_num(dataframe["Activity 1"])
+dataframe["Activity 2"]         =   np.nan_to_num(dataframe["Activity 2"])
+dataframe["Activity 3"]         =   np.nan_to_num(dataframe["Activity 3"])
+dataframe["Activity 4"]         =   np.nan_to_num(dataframe["Activity 4"])
+dataframe["A1_nb_cat"]          =   pd.cut(dataframe["Activity 1"]  ,[0,2,5,10,20,50])
+dataframe["A2_nb_cat"]          =   pd.cut(dataframe["Activity 2"]  ,[0,2,5,10,20,50])
+dataframe["A3_nb_cat"]          =   pd.cut(dataframe["Activity 3"]  ,[0,2,5,10,20,50])
+dataframe["A4_nb_cat"]          =   pd.cut(dataframe["Activity 4"]  ,[0,2,5,10,20,50])
+dataframe["Dist_School_Home"]   =   pow(
+                                        pow(dataframe['X_school']-dataframe['X'],2)
+                                      + pow(dataframe['Y_school']-dataframe['Y'],2)  
+                                                                                  ,0.5)/1000
+dataframe["Dist_School_Home"]   =   np.nan_to_num(dataframe["Dist_School_Home"])                                                                                    
+dataframe["Dist_S_H_cat"]       =   pd.cut(dataframe["Dist_School_Home"],[0,25,50,100,200,600]  ,labels = list_Dist_S_H_cat)
+
+
+#_______________________________________________________________________________
+
+dataSuccess                     =   dataframe[dataframe["marketing"]=="success"]
+dataFail                        =   dataframe[dataframe["marketing"]=="failure"]
+dataStudent                     =   dataframe[dataframe["CSP"]=="Étudiants"]
+
+def Groupby_unstack_HorPer_size(df,columns):#pour test descriptif 2 variables
+    #1ère "column" = colonne
+    Size = df.groupby(columns).size().unstack().transpose() 
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+    PourcentTotDf = round(100*(Size/df.shape[0]),2)
+    return Size,Pourcent, PourcentTotDf
+
+def Croise_Groupby_unstack_HorPer_size(df,columns):#pour test descriptif plus
+    #de 2 variables, dernière "columm"= colonne
+    Size = df.groupby(columns).size().unstack() 
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+    return Size, Pourcent
+
+def Groupby_unstack_HorPer_size_pre(df,columns):#test pour prédire
+    Size = df.groupby(columns).size().unstack()
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+    return Size.transpose(),Pourcent.transpose()
+
+def Croise_Groupby_unstack_HorPer_size_pre(df,columns):#pour test prediction à plus de 2 variables, dernière "columm"= colonne
+    Size = df.groupby(columns).size().unstack().transpose()
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+    PourcentTotDf = round(100*(Size/df.shape[0]),2)
+    return  Size.transpose(),Pourcent.transpose(),PourcentTotDf.transpose()
+
+def Groupby_HorPer_size(df,columns): #description d'une variable
+    Size = df.groupby(columns).size()
+    Pourcent = round(100*(Size/Size.sum(axis=0)).transpose(),2)
+    return  Size,Pourcent
+
+def Groupby_unstack_HorPer_mean_1C(df,columns,used_var):
+    Size = df.groupby(columns)[used_var].mean()
+    Mean = round(Size.unstack().transpose(),2)
+    return Mean
+
+def Activities_Mean (df, columns, used_var):
+    Sum = df.groupby([columns])[used_var].sum()
+    Comptage = df[columns].value_counts()
+    Mean = round (Sum/Comptage,2)
+    return Mean
+    
+def df_Debut_Tri_Desc (df, nb,nbColonnes): 
+    y = df.sort_values(by=df.columns[nbColonnes],ascending = False)
+    return y.head(nb)
+
+def Serie_Debut_Tri_Desc (serie, nb): 
+    y = serie.sort_values(axis=0,ascending = False)
+    return y.head(nb)
+
+def Groupby_HorPer_sum_Cs(df,columns,used_var,return_type): 
+    MsgError = "\n Attention la variable return_type est mal saisie. Les 7 options possibles sont : \n \n - all : Les effectifs et les pourcentages conditionnels, \n - Size : les effectifs \n - Pourcent : les probabilités conditionnels, \n - les quatres dernières catégories sont destinés à limiter le nombre d observations à 10 ou bien 15 et choisir la colonne avec laquelle on fait le tri des données (soit C1 soit C2) la variable est donc soit : \n \n all_arranged_10_C0, \n all_arranged_10_C1, \n all_arranged_15_C0, \n all_arranged_15_C1."
+
+    Size = round(df.groupby(columns)[used_var].sum(),0)
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+
+    if return_type == "all":
+        return Size, Pourcent
+    elif return_type == "Size":
+        return Size
+    elif return_type == "Pourcent" :
+        return Pourcent 
+    elif return_type == "all_arranged_10_C0":
+        return df_Debut_Tri_Desc(Size,10,0), df_Debut_Tri_Desc(Pourcent,10,0)
+    elif return_type == "all_arranged_10_C1":
+        return df_Debut_Tri_Desc(Size,10,1), df_Debut_Tri_Desc(Pourcent,10,1)
+    elif return_type == "all_arranged_15_C0":
+        return df_Debut_Tri_Desc(Size,15,0), df_Debut_Tri_Desc(Pourcent,15,0)  
+    elif return_type == "all_arranged_15_C1":
+        return df_Debut_Tri_Desc(Size,15,1), df_Debut_Tri_Desc(Pourcent,15,1)
+    else: 
+        return print(MsgError)
+ 
+def fonction_Groupby_descending_sort (df, columns,used_var,nbObservations,n_ColonnesSort,Choix_123):
+    
+    Size = round(df.groupby(columns)[used_var].sum(),0)
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+
+    MsgError = "Attention la variable Choix_123 est mal saisie. Les options possibles sont : \n - 1 : Les effectifs, \n - 2 : les probabilités conditionnels \n - 3 les probabilités considérant l'ensemble de la population."
+    
+    if Choix_123 == 1: 
+        return df_Debut_Tri_Desc(Size,nbObservations,n_ColonnesSort)
+    elif Choix_123 == 2: 
+        return df_Debut_Tri_Desc(Pourcent,nbObservations,n_ColonnesSort)
+    elif Choix_123 == 3: 
+        return df_Debut_Tri_Desc(Size,nbObservations,n_ColonnesSort),df_Debut_Tri_Desc(Pourcent,nbObservations,n_ColonnesSort)
+    else : 
+        return print(MsgError)
+
+def Croise_Groupby_unstack_HorPer_size_preBis(df,columns,nb,N_Obs):#pour test prediction à plus de 2 variables, dernière "columm"= colonne
+    Size = df.groupby(columns).size().unstack().transpose()
+    Pourcent = round(100*(Size/Size.sum(axis=0)),2)
+    PourcentTotDf = round(100*(Size/df.shape[0]),2)
+    return  df_Debut_Tri_Desc(Size.transpose(),nb,N_Obs),df_Debut_Tri_Desc(Pourcent.transpose(),nb,N_Obs), df_Debut_Tri_Desc(PourcentTotDf.transpose(),nb,N_Obs)
+
+#______________________________________________________________________________
+
+# SECTION     ANALYSE
+    
+# PARITE 1 - Description de la population
+
+Groupby_HorPer_size(dataframe,['genre'])
+
+dataframe["age"].describe()
+dataframe["trip_nb"].describe()
+dataframe["Activities_nb"].describe()
+
+Groupby_HorPer_size(dataframe,['age_cat'])
+Groupby_HorPer_size(dataframe,['CSP'])
+
+Groupby_HorPer_size(dataframe,["longitude_cat","latitude_cat"])
+Groupby_HorPer_size(dataframe,['Region_name'])
+Groupby_HorPer_size(dataframe,['department'])
+Groupby_HorPer_size(dataframe,['City_size'])
+Groupby_HorPer_size(dataframe,['city_type'])
+
+Groupby_HorPer_size(dataframe,['marketing'])
+
+Groupby_unstack_HorPer_size(dataframe,["age_cat","City_size"])
+Groupby_unstack_HorPer_size(dataframe,["age_cat","city_type"])
+
+
+# Analyse partie 3  - Statistique descriptive des succès de la campagne  # marketing en premier
+
+# 1. Une vision globale
+
+#Succès/Echec
+Groupby_HorPer_size(dataframe,['marketing'])
+#Genre
+Groupby_HorPer_size(dataframe,['genre'])
+#Les âges
+Groupby_HorPer_size(dataframe,['age_cat'])
+Groupby_HorPer_size(dataframe,['age_cat_details'])
+dataframe["age"].describe()
+#Les CSP
+Groupby_HorPer_size(dataframe,['CSP'])
+
+#-----------------------
+# 2. test simple
+
+#genre
+Groupby_unstack_HorPer_size(dataframe,["marketing","genre"])  
+Groupby_HorPer_size(dataframe,['genre'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","genre"])
+
+#Age
+Groupby_unstack_HorPer_size(dataframe,["marketing","age_cat"])
+Groupby_HorPer_size(dataframe,['age_cat'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","age_cat"])
+#puis
+Groupby_unstack_HorPer_size(dataframe,["marketing","age_cat_details"])
+Groupby_HorPer_size(dataframe,['age_cat_details'])
+Groupby_unstack_HorPer_size_pre(dataframe,["age_cat_details","marketing"])
+
+#CSP
+Groupby_unstack_HorPer_size(dataframe,["marketing","CSP"])
+Groupby_HorPer_size(dataframe,['CSP'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","CSP"])
+
+#population de la ville de résidence
+Groupby_unstack_HorPer_size(dataframe,["marketing","City_size"])
+Groupby_HorPer_size(dataframe,['City_size'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","City_size"])
+
+#type de la ville de résidence
+Groupby_unstack_HorPer_size(dataframe,["marketing","city_type"])
+Groupby_HorPer_size(dataframe,['city_type'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","city_type"])
+
+#Lieu de résidence/d'étude
+Groupby_unstack_HorPer_size(dataStudent,["marketing","Dist_S_H_cat"])
+Groupby_HorPer_size(dataStudent,['Dist_S_H_cat'])
+Groupby_unstack_HorPer_size_pre(dataStudent,["marketing","Dist_S_H_cat"])
+
+#comportement de voyage (limite pas France)
+Groupby_unstack_HorPer_size(dataframe,["marketing","trip_nb_cat"])
+Groupby_HorPer_size(dataframe,['trip_nb_cat'])
+Groupby_unstack_HorPer_size_pre(dataframe,["marketing","trip_nb_cat"])
+
+#------------------- 
+# 3. test croisé
+
+#genre et CSP
+Croise_Groupby_unstack_HorPer_size(dataframe,["genre","CSP","marketing"])
+Groupby_unstack_HorPer_size(dataframe,["genre","CSP"])
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["genre","CSP","marketing"])
+
+#genre et âge
+Croise_Groupby_unstack_HorPer_size(dataframe,["genre","age_cat_details","marketing"])
+Groupby_unstack_HorPer_size(dataframe,["genre","age_cat_details"])
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["genre","age_cat_details","marketing"])
+
+#genre et type administratif de ville
+Croise_Groupby_unstack_HorPer_size(dataframe,["genre","city_type","marketing"])
+Groupby_unstack_HorPer_size(dataframe,["genre","city_type"])
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["genre","city_type","marketing"])
+
+#lieu de résidence et ville d'étude
+Groupby_unstack_HorPer_size(dataStudent,["marketing","Dist_S_H_cat"])
+Groupby_HorPer_size(dataStudent,['Dist_S_H_cat'])
+Groupby_unstack_HorPer_size_pre(dataStudent,["marketing","Dist_S_H_cat"])
+
+#âge et CSP
+Croise_Groupby_unstack_HorPer_size(dataframe,["age_cat_details","CSP","marketing"])
+Groupby_unstack_HorPer_size(dataframe,["age_cat_details","CSP"])
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["age_cat_details","CSP","marketing"])
+
+#âge et type admnistratif de ville
+Croise_Groupby_unstack_HorPer_size(dataframe,["age_cat_details","city_type","marketing"])
+Groupby_unstack_HorPer_size(dataframe,["age_cat_details","city_type"])
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["age_cat_details","city_type","marketing"])
+
+#-----------------
+# 4. Les activités
+
+Activities_Mean(dataSuccess,"genre","Activities_nb")
+Activities_Mean(dataSuccess,"CSP","Activities_nb")
+Activities_Mean(dataSuccess,"age_cat_details","Activities_nb")
+
+# ANALYSE PARTIE IV - GROUPED ANALYSIS
+
+#niveau national
+Croise_Groupby_unstack_HorPer_size_pre(dataframe,["longitude_cat","latitude_cat","marketing"])
+Serie_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["longitude_cat","latitude_cat"],"Activities_nb","Size"),10)
+for i in range(4):
+    df_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["longitude_cat","latitude_cat"],
+                            list_Activity,"Size"),10,i)
+
+# niveau regional 
+Croise_Groupby_unstack_HorPer_size_preBis(dataframe,["Region_name","marketing"],10,1)
+for i in range(4):
+    df_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["Region_name"],
+                            list_Activity,"Pourcent"),5,i)
+for i in list_A_cat:
+    Croise_Groupby_unstack_HorPer_size_preBis(dataframe,["Region_name",i],5,1)
+# ou pour la première colonne
+Groupby_HorPer_sum_Cs(dataframe,["Region_name"],list_Activity,"all_arranged_10_C0"),
+
+# niveau département
+Croise_Groupby_unstack_HorPer_size_preBis(dataframe,["department","marketing"],20,1)
+
+Groupby_HorPer_sum_Cs(dataframe,["department"],list_Activity,"all_arranged_10_C0"),
+
+for i in range(4): 
+    df_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["department"],
+                            list_Activity,"Size"),15,i)
+# niveau municipal
+Croise_Groupby_unstack_HorPer_size_preBis(dataframe,["city_name","marketing"],10,1)
+Croise_Groupby_unstack_HorPer_size_preBis(dataframe,["city_type","marketing"],10,1)     
+for i in range(4): 
+    df_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["city_name"],
+                            list_Activity,"Pourcent"),15,i)
+Groupby_HorPer_size(dataSuccess,["city_type"])
+Groupby_HorPer_sum_Cs(dataframe,["city_type"],list_Activity,"all")
+Serie_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["city_type"],"Activities_nb","Size"),10)
+Groupby_HorPer_size(dataframe,["marketing","City_size"])
+Groupby_HorPer_size(dataSuccess,["City_size"])
+Groupby_HorPer_sum_Cs(dataframe,["City_size"],list_Activity,"all_arranged_10_C0")
+Serie_Debut_Tri_Desc(Groupby_HorPer_sum_Cs(dataframe,["City_size"],"Activities_nb","Size"),10)
+dataSuccess     .groupby(["longitude_cat","latitude_cat",
+                          "Activity_desc"])                .size()  .unstack()
+dataSuccess     .groupby(["Region_name","marketing"])      .size()  .unstack()
+dataSuccess     .groupby(["Region_name","Activity_desc"])  .size()  .unstack()
+
+Croise_Groupby_unstack_HorPer_size_preBis(dataSuccess,["city_type","Activity_desc"],10,1)
+Croise_Groupby_unstack_HorPer_size_preBis(dataSuccess,["City_size","Activity_desc"],10,1)
+
+#______________________________________________________________________________
+
+# Fonction graphique
+
+def Pie_dataframe (variable_used,colors_set):
+    dataframe[variable_used].value_counts().plot.pie(autopct='%1.2f',colors = colors_set)
+
+def Pie_dataSuccess (variable_used,colors_set):
+    dataSuccess[variable_used].value_counts().plot.pie(autopct='%1.2f',colors = colors_set)
+    
+def barh_data (base,variable_used) :
+    base[variable_used].value_counts().plot.barh()
+
+def bar_data (base,variable_used) :
+    base[variable_used].value_counts().plot.bar()
+    
+def Pie_data (df,variable_used) :
+    df[variable_used].value_counts().plot.pie(autopct='%1.2f')
+    
+def Double_Pie (array,label1,colors1,colors2,title_name):
+    fig, ax = plt.subplots()
+
+    size = 0.2
+    vals = np.array(array)
+
+    ax.pie(vals.sum(axis=1), radius=1, labels = label1,
+           colors=colors1, wedgeprops=dict(width=size, edgecolor='w'))
+    ax.pie(vals.flatten(), radius=1-size,autopct= '%1.2f', colors=colors2,
+           wedgeprops=dict(width=size, edgecolor='w'))
+    ax.set(title=title_name)
+    
+#Graphique de la partie 2 - Description de la population
+ 
+"""# Ventillation - homme femme                    
+Pie_dataframe("genre",colors_men_women)
+Pie_dataSuccess("genre",colors_men_women)
+"""
+      
+""" # Ventillation - catégories d'âge
+
+Pie_data(dataframe,"age_cat")
+Pie_data(dataSuccess,"age_cat")
+  
+Pie_data(dataframe,"Dist_S_H_cat")
+
+Pie_data(dataframe,"age_cat_details")
+Pie_data(dataSuccess,"age_cat_details")  
+"""
+
+""" # Ventillation - taille des villes 
+Pie_data(dataframe,"City_size")       
+Pie_data(dataSuccess,"City_size")        
+"""
+
+"""# Ventillation - types des villes
+Pie_data(dataframe,"city_type")       
+Pie_data(dataSuccess,"city_type")
+"""
+
+""" # Ventillation - CSP   
+barh_data(dataframe,"CSP")
+barh_data(dataSuccess,"CSP")
+
+# Graphique de la partie 3 - Etude individuel de la population
+
+#  Repartition failure succes
+dataframe["marketing"].value_counts().plot.pie(explode=(0.2,0),autopct= '%1.2f')
+""" 
+""" # Repartition par le genre 
+Pie_dataframe   ("genre",colors_men_women)
+Pie_dataSuccess ("genre",colors_men_women)
+"""
+  
+""" # Repartition marketing et genre
+Double_Pie([[5088., 3532.], [185., 1195.]],["Failure","Success"],
+           ["red","turquoise"],colors_men_women,
+           'Success and failure : homme et femme') #sympa visuellement mais 
+#peut-être afficher % pour les succès également ?
+
+# Ventillation - Activity_desc                                      (hist)
+x = dataframe.groupby(["Activity_desc"]).size()
+ax = x.plot(kind = 'bar',colors = ['tan'])
+ax.set_ylabel('Number - Activity_desc')
+print(ax)
+"""
+
+
+"""# Ventillation - Marketing == success   - CSP                       (hist)
+bar_data(dataSuccess,"CSP")
+""" 
+
+""" # Ventillation - Marketing == failure   - CSP                       (hist)
+dataFail["CSP"].value_counts().plot.bar()
+"""
+
+"""# Histogram -  Marketing == success - Age 
+x = dataSuccess.groupby(["age_cat_details"]).size()
+ax = x.plot(kind = 'bar', colors = ['tan'])
+ax.set_ylabel('Number -     Age (marketing = success)')
+print(ax)
+
+Pie_data_frame("age_cat")
+Pie_data_Success("age_cat")
+
+Pie_data_frame("age_cat_details")
+Pie_data_Success("age_cat_details")
+"""
+
+""" # Repartition marketing = success et genre, activity            (double pie)
+Double_Pie([[59., 599.], [30., 145.],[39., 249.], [15., 74.]],
+            ["Activity 1","Activity 2","Activity 3","Activity 4"],
+           ["red","turquoise","yellow","green"],colors_men_women,
+           'Success - Activities_desc : homme et femme') 
+"""
+
+
+# Graphique de la partie 4 - Etude groupée
+"""
+ #  Repartition Latitude et longitude au niveau globlal  (pie chart)
+
+
+#Etude de la population qui a repondu favorablement à la campagne
+Pie_data(dataSuccess,"longitude_cat")
+Pie_data(dataSuccess,"latitude_cat")
+
+
+"""
+
+""" #Distribution des activités
+Pie_data(Activity_Date_Desc,"Activity_desc")
+"""
+
+"""# Taille de ville (population municipale)
+Pie_data_frame("City_size")
+Pie_data_Success("City_size")
+Pie_data_Fail("City_size")
+"""
+
+""" # Type de ville 
+Pie_data(dataframe,"city_type")
+Pie_data(dataSuccess,"city_type")
+Pie_data(dataFail,"city_type")
+"""
+
+#_____________
+#Pie_data(dataFuseau30,"latitude_cat")
+#Pie_data(dataFuseau31,"latitude_cat")
+#Pie_data(dataFuseau31bis,"latitude_cat")
+#Pie_data(dataFuseau32,"latitude_cat")
